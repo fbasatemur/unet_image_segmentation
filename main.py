@@ -17,6 +17,7 @@ import cv2 as cv
 
 import re
 import glob
+import gc
 
 from unet import UNet
 
@@ -30,6 +31,17 @@ def Numerical_Sort(value):
     parts[1::2] = map(int, parts[1::2])
     return parts
 
+def Read_Images_Test(folder_path, image_names):
+    images = []
+    for filename in sorted(glob.glob(folder_path), key=Numerical_Sort):
+        image_names.append(filename.split('/')[-1])
+        img = cv.imread(filename, flags = cv.IMREAD_GRAYSCALE)
+        images.append(Normalize(img))
+    
+    images = np.asarray(images, dtype=np.float32)
+    images = images[:, :, :, np.newaxis, np.newaxis]    # format => [N, H, W, C1, C2]
+    return images
+
 def Read_Images_Train(folder_path, image_names):
     images = []
     for filename in sorted(glob.glob(folder_path), key=Numerical_Sort):
@@ -38,28 +50,34 @@ def Read_Images_Train(folder_path, image_names):
         images.append(Normalize(img))
     
     images = np.asarray(images, dtype=np.float32)
-    images = images[:, :, :, np.newaxis, np.newaxis]    # format => [N, H, W, C]
+    images = images[:, :, :, np.newaxis]    # format => [N, H, W, C]
     return images
 
-def Read_Images_Test(folder_path, image_names):
-    images = []
+def Read_Images_GTruth(folder_path, image_names):
+    labels = []
     for filename in sorted(glob.glob(folder_path), key=Numerical_Sort):
         image_names.append(filename.split('/')[-1])
-        img = cv.imread(filename, flags = cv.IMREAD_GRAYSCALE)
-        img = cv.resize(img, (324,324), interpolation = cv.INTER_AREA)
-        images.append(Normalize(img))
+        mask = cv.imread(filename, flags = cv.IMREAD_GRAYSCALE)
+        mask = cv.resize(mask, (322,322), interpolation = cv.INTER_AREA)
+        mask = Normalize(mask)
+        mask[mask > 0.5] = 1
+        mask[mask <= 0.5] = 0
+        labels.append(mask)
     
-    images = np.asarray(images, dtype=np.float32)
-    images = images[:, :, :, np.newaxis, np.newaxis]    # format => [N, H, W, C]
-    return images
+    labels = np.asarray(labels, dtype=np.float32)
+    labels = labels[:, :, :, np.newaxis]    # format => [N, H, W, C]
+    return labels
 
 def matplotlib_imshow(img, one_channel=False):
-    npimg = img.cpu().numpy()
-    np.interp(npimg, (npimg.min(), npimg.max()), (0, 255))
+    npimg = img.cpu().detach().numpy()
+    npimg = (npimg * 255.0).astype("int")
+    # npimg = ((npimg - npimg.min()) / (npimg.max() - npimg.min()) * 255.0).astype("int")  
     if one_channel:
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
     else:
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
+
+    
 
 #%% dataset load and preprocessing
 
@@ -74,9 +92,9 @@ test_images = []
 image_names = []
 train_gtruth = []
 train_images = []
-test_images = Read_Images_Train(test_images_path, image_names)
+test_images = Read_Images_Test(test_images_path, image_names)
 train_images = Read_Images_Train(train_images_path, image_names)    
-train_gtruth = Read_Images_Test(train_gtruth_path, image_names)
+train_gtruth = Read_Images_GTruth(train_gtruth_path, image_names)
 
 #%%
 # Create data loaders.
@@ -84,57 +102,60 @@ train_gtruth = Read_Images_Test(train_gtruth_path, image_names)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'Using {device} device')
 
+# pytorch input format => [N, H, W, C1] -> [N, C1, H, W]
+train_tensor = torch.from_numpy(train_images).transpose_(2 , 3).transpose_(1 , 2).float().to(device)
+train_gtruth_tensor = torch.from_numpy(train_gtruth).transpose_(2 , 3).transpose_(1 , 2).float().to(device)
 # pytorch input format => [N, H, W, C1, C2] -> [N, C1, C2, H, W]
-test_tensor = torch.from_numpy(test_images).transpose_(3 , 1).transpose_(4 , 2).float().to(device)
-train_tensor = torch.from_numpy(train_images).transpose_(3 , 1).transpose_(4 , 2).float().to(device)
-train_gtruth_tensor = torch.from_numpy(train_gtruth).transpose_(3 , 1).transpose_(4 , 2).float().to(device)
+test_tensor = torch.from_numpy(test_images).transpose_(1 , 3).transpose_(2 , 4).float().to(device)
 
-test_dl = DataLoader(test_tensor, batch_size=10, shuffle=False)
-train_dl = DataLoader(train_tensor, batch_size=10, shuffle=False)
-train_gtruth_dl = DataLoader(train_gtruth_tensor, batch_size=10, shuffle=False)
-
-train_iter = next(iter(train_dl))
-train_gtruth_iter = next(iter(train_gtruth_dl))
+batch_size = 1
+train_dl = DataLoader(train_tensor, batch_size=batch_size, shuffle=False)
+train_gtruth_dl = DataLoader(train_gtruth_tensor, batch_size=batch_size, shuffle=False)
+test_dl = DataLoader(test_tensor, batch_size = len(test_images), shuffle=False)
 test_iter = next(iter(test_dl))
+
 #%%
 
 model = UNet().to(device)
 print(model)
-optim = torch.optim.Adam(model.parameters(), lr = 0.001)
+optim = torch.optim.Adam(model.parameters(), lr=0.0001)
 epoch = 10
 
 #%%
-
 for _ in range(epoch):
-    for i in range(len(train_iter)):
+    for i in range(len(train_dl)):
+        train_iter = next(iter(train_dl))
+        train_gtruth_iter = next(iter(train_gtruth_dl))
         optim.zero_grad()
-        prediction = model(train_iter[i])
-        loss = F.mse_loss(prediction, train_gtruth_iter[i])
+        prediction = model(train_iter)
+        loss = F.mse_loss(prediction, train_gtruth_iter)
         loss.backward()
         optim.step()
         print(loss)
-
+        del loss, train_iter, prediction, train_gtruth_iter
+        
 print('Finished Training')
 
-test_prediction = model(test_iter[0])
+#%%
+test_prediction = model(test_iter[1])
 img_grid = make_grid(test_prediction)
 
 # show images
 matplotlib_imshow(img_grid, one_channel=True)
-
-#%% model save
-
-torch.save(model.state_dict(), "model.pth")
-print("Saved PyTorch Model State to model.pth")
 
 #%%
-# model load
-model_test = UNet().to(device)
-model_test.load_state_dict(torch.load("model.pth"))
+# model save
+# torch.save(model.state_dict(), "model.pth")
+# print("Saved PyTorch Model State to model.pth")
 
-test_prediction = model_test(test_iter[0])
-img_grid = make_grid(test_prediction)
+# #%%
+# # model load
+# model_test = UNet().to(device)
+# model_test.load_state_dict(torch.load("model.pth"))
 
-# show images
-matplotlib_imshow(img_grid, one_channel=True)
-print(5)
+# test_prediction = model_test(test_iter[0])
+# img_grid = make_grid(test_prediction)
+
+# # show images
+# matplotlib_imshow(img_grid, one_channel=True)
+# print(5)
