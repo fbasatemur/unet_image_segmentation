@@ -36,12 +36,15 @@ class Up_Conv(nn.Module):
     def forward(self, x):
         return self.up_conv(x)
     
+def Center_Crop(big_tensor, little_tensor_shape):
+    cut_y, cut_x = (int((big_tensor.shape[2] - little_tensor_shape[2])/2), int((big_tensor.shape[3] - little_tensor_shape[3])/2))
+    return big_tensor[:,:,cut_y: cut_y + little_tensor_shape[2], cut_x: cut_x + little_tensor_shape[3]]
 
 class UNet(nn.Module):
     def __init__(self):
         super(UNet, self).__init__()
         self.maxpool = nn.MaxPool2d((2,2))
-        # self.upsample = nn.Upsample(scale_factor=2, mode='nearest')       
+        self.drop = nn.Dropout2d(0.5)     
 
         self.conv1 = Double_Conv(1, 64, 3)
         self.conv2 = Double_Conv(64, 128, 3)
@@ -50,23 +53,23 @@ class UNet(nn.Module):
 
         self.conv5 = Double_Conv(512, 1024, 3)
         
-        self.up_conv1 = Up_Conv(1024,512)
+        self.up_conv1 = Up_Conv(1024, 512)
         # concat conv4 + up_conv1 
         self.conv6 = Double_Conv(512 + 512, 512, 3) 
 
-        self.up_conv2 = Up_Conv(512,256)
+        self.up_conv2 = Up_Conv(512, 256)
         # concat conv3 + up_conv2
         self.conv7 = Double_Conv(256 + 256, 256, 3) 
 
-        self.up_conv3 = Up_Conv(256,128)
+        self.up_conv3 = Up_Conv(256, 128)
         # concat conv2 + up_conv3
         self.conv8 = Double_Conv(128 + 128, 128, 3) 
 
-        self.up_conv4 = Up_Conv(128,64)
+        self.up_conv4 = Up_Conv(128, 64)
         # concat conv1 + up_conv4
         self.conv9 = Double_Conv(64 + 64, 64, 3)
         
-        self.conv10 = nn.Conv2d(64, 1, 3) 
+        self.conv10 = nn.Conv2d(64, 1, 1) 
 
     def forward(self, x):
         x_conv1 = self.conv1(x)
@@ -84,48 +87,46 @@ class UNet(nn.Module):
         x = self.maxpool(x_conv3)
         #print(x.shape)
 
-        x_conv4 = self.conv4(x)
-        #print(x_conv4.shape)
-        x = self.maxpool(x_conv4)
+        x = self.conv4(x)
+        x_drop4 = self.drop(x)
+        #print(x_drop4.shape)
+        x = self.maxpool(x_drop4)
         #print(x.shape)
         
         x = self.conv5(x)
+        x = self.drop(x)
         #print(x.shape)
 
         x = self.up_conv1(x)
-        # print(x.shape)
-        cut_y, cut_x = x_conv4.shape[2] - x.shape[2], x_conv4.shape[3] - x.shape[3]
-        x = torch.cat((x_conv4[:,:,cut_y: cut_y + x.shape[2], cut_x: cut_x + x.shape[3]], x), dim=1)
-        # print(x.shape)
+        #print(x.shape)
+        x = torch.cat((Center_Crop(x_drop4, x.shape), x), dim=1)
+        #print(x.shape)
         x = self.conv6(x)
-        # print(x.shape)
+        #print(x.shape)
 
         x = self.up_conv2(x)
-        # print(x.shape)
-        cut_y, cut_x = x_conv3.shape[2] - x.shape[2], x_conv3.shape[3] - x.shape[3]
-        x = torch.cat((x_conv3[:,:,cut_y: cut_y + x.shape[2], cut_x: cut_x + x.shape[3]], x), dim=1)
-        # print(x.shape)
+        #print(x.shape)
+        x = torch.cat((Center_Crop(x_conv3, x.shape), x), dim=1)
+        #print(x.shape)
         x = self.conv7(x)
-        # print(x.shape)
+        #print(x.shape)
         
         x = self.up_conv3(x)
-        # print(x.shape)
-        cut_y, cut_x = x_conv2.shape[2] - x.shape[2], x_conv2.shape[3] - x.shape[3]
-        x = torch.cat((x_conv2[:,:,cut_y: cut_y + x.shape[2], cut_x: cut_x + x.shape[3]], x), dim=1)
-        # print(x.shape)
+        #print(x.shape)
+        x = torch.cat((Center_Crop(x_conv2, x.shape), x), dim=1)
+        #print(x.shape)
         x = self.conv8(x)
-        # print(x.shape)
+        #print(x.shape)
 
         x = self.up_conv4(x)
-        # print(x.shape)
-        cut_y, cut_x = x_conv1.shape[2] - x.shape[2], x_conv1.shape[3] - x.shape[3]
-        x = torch.cat((x_conv1[:,:,cut_y: cut_y + x.shape[2], cut_x: cut_x + x.shape[3]], x), dim=1)
-        # print(x.shape)
+        #print(x.shape)
+        x = torch.cat((Center_Crop(x_conv1, x.shape), x), dim=1)
+        #print(x.shape)
         x = self.conv9(x)        
-        # print(x.shape)
+        #print(x.shape)
         
         output = torch.sigmoid(self.conv10(x))
-        print(output.shape)
+        #print(output.shape)
 
         return output
     
