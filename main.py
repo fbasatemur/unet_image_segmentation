@@ -111,8 +111,7 @@ test_images = Read_Images_Test(test_images_path, image_names)
 train_images = Read_Images_Train(train_images_path, image_names)    
 train_gtruth = Read_Images_GTruth(train_gtruth_path, image_names)
 
-#%%
-# Create data loaders.
+#%% Create data loaders.
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'Using {device} device')
@@ -133,7 +132,7 @@ test_iter = next(iter(test_dl))
 model = UNet().to(device)
 print(model)
 optim = torch.optim.Adam(model.parameters(), lr=0.0001)
-epoch = 200
+epoch = 300
 
 #%% train
 for e in range(epoch):
@@ -150,23 +149,21 @@ for e in range(epoch):
 
 print('Finished Training')
 
-#%%
+#%% predict 
 test_img_index = 0
 test_prediction = model(test_iter[test_img_index])   
-img_grid = make_grid(test_prediction)
 
 # show images
+img_grid = make_grid(test_prediction)
 Matplotlib_Imshow(img_grid)
 
-#%%
-# model save
-torch.save(model.state_dict(), "./model_save/model.pth")
+#%% model save
+torch.save(model.state_dict(), "./model.pth")
 print("Saved PyTorch Model State to model.pth")
 
-#%%
-# model load
+#%% model load
 model_test = UNet().to(device)
-model_test.load_state_dict(torch.load("./model_save/model.pth"))
+model_test.load_state_dict(torch.load("./model.pth"))
 
 test_prediction = model_test(test_iter[0])
 img_grid = make_grid(test_prediction)
