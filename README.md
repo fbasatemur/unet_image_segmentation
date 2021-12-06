@@ -1,4 +1,4 @@
-# Pytorch - Unet: for Biomedical Image Sementation 
+# Pytorch - Unet: for Biomedical Image Segmentation 
 For biomedical images, unet was first mentioned in article [U-Net: Convolutional Networks for Biomedical Image Segmentation](https://arxiv.org/abs/1505.04597) (Ronneberger et al., 2015). In this repository, neuronal membrane segmentation will be perform use the unet architecture in below.
 
 ![unet_architecture](https://github.com/fbasatemur/unet_image_segmentation/blob/main/docs/u-net-architecture.png)
@@ -16,6 +16,6 @@ Border reflect is applied to the input images (512x512) to convert the images to
 ## Train - Test
 When test/0.tiff is given to 300 Epoch trained model inputs, the following result is obtained.
 
-***512x512 - test/0.tiff***             |  ***model output***   
+***512x512 - test/0.tiff***             |  ***388x388 model output***   
 :-------------------------:|:-------------------------:
 ![](https://github.com/fbasatemur/unet_image_segmentation/blob/main/docs/test_0.jpg)  |  ![](https://github.com/fbasatemur/unet_image_segmentation/blob/main/docs/test_0-predict.png) 
