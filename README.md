@@ -1,5 +1,5 @@
 # Pytorch - Unet: for Biomedical Image Sementation 
-For biomedical images, unet was first mentioned in article [U-Net: Convolutional Networks for Biomedical Image Segmentation](https://arxiv.org/abs/1505.04597) (Ronneberger et al., 2015). In this repo, unet architecture in below will be detail. 
+For biomedical images, unet was first mentioned in article [U-Net: Convolutional Networks for Biomedical Image Segmentation](https://arxiv.org/abs/1505.04597) (Ronneberger et al., 2015). In this repository, neuronal membrane segmentation will be perform use the unet architecture in below.
 
 ![unet_architecture](https://github.com/fbasatemur/unet_image_segmentation/blob/main/docs/u-net-architecture.png)
 
